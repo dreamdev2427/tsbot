@@ -70,7 +70,7 @@ export const botEnum = {
     connect_eth_wallet: 'connect_eth_wallet',
     generate_eth_wallet: 'generate_eth_wallet',
     register: 'Register',
-    linkAccount: 'Link Account',
+    linkAccount: 'Participate',
     go_back: 'Go Back',
     PARSE_MODE: 'Markdown',
     verifyAccount: 'Verify Account',

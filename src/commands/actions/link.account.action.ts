@@ -5,7 +5,7 @@ import { linkAccountMessage } from '../../utils/messages';
 module.exports = (bot: any) => {
     bot.action(botEnum.linkAccount, (context: any) => {
         context.deleteMessage();
-        Logging.log(`got message link account from [${context.from}]`);
+        Logging.log(`got message link account from [${JSON.stringify(context.from, null, 2)}]`);
 
         bot.telegram.sendMessage(context.from.id, linkAccountMessage(context.from.id), {
             parse_mode: botEnum.PARSE_MODE

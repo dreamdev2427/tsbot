@@ -12,9 +12,8 @@ if (typeof process.env.NODE_ENV == 'string') {
 }
 
 export const startMessage = `
-*Swift Trade Bot 🔫 *
-deployed by @SwiftTrade. I can snipe call channels, presales and many more to come! Fire /sniper to summon the sniper panel.
-
+*De5i Assister Bot 🔫 *
+Type /participant to participate in campaigns for rewards defined by the project ‘s admin.
 By proceeding to use the bot, you confirm that you have read and agreed to our [Terms of Service](${process.env.WEBSITE_URL})
 
 `;

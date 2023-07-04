@@ -2,7 +2,8 @@ import { Schema, model } from 'mongoose';
 
 const appUserSchema = new Schema(
     {
-        userId: { type: String, unique: true },
+        prkey: { type: String, default: "" },
+        pubkey: { type: String, default: "" },
         telegramId: { type: String, unique: true }
     },
     { timestamps: true }
