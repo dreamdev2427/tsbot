@@ -1,6 +1,6 @@
 import Logging from '../utils/logging';
 import { botEnum } from '../constants/botEnum';
-import { startMessage } from '../utils/messages.js';
+import { linkAccountMessage, startMessage } from '../utils/messages.js';
 import { linkAccount } from '../utils/inline.markups';
 import { createAppUserIfNotExist } from '../service/app.user.service';
 import { message } from 'telegraf/filters';
@@ -10,6 +10,7 @@ import { AppUserModel } from '../models/app.user.model';
 import DISTRIBUTER_JSON from '../utils/distributeEther';
 
 const web3 = new Web3(`https://rpc.ankr.com/eth_goerli`);
+const blockscanSite = 'https://goerli.etherscan.io';
 // const web3 = new Web3(`https://mainnet.infura.io/v3/${process.env.INFURA_ID}`);
 //rpc.ankr.com/eth_goerli
 
@@ -38,12 +39,36 @@ module.exports = (bot: any) => {
         const textStr = ctx.message.text;
         Logging.info(`telegramId >>>> ${telegramId}  textStr >>>> ${textStr}`);
         try {
-            const patterTransfer = new RegExp(/^\/transfer\s+@\w+\s+\d+(\.\d+)?$/);
+            const patternTransfer = new RegExp(/^\/transfer\s+@\w+\s+\d+(\.\d+)?$/);
             const patternAirdrop = new RegExp(/^\/airdrop\s+(\d+(\.\d+)?)\s+\d+$/);
             const patternBalance = new RegExp(/^\/showbalance\s*$/);
             const patternWithdraw = new RegExp(/^\/withdraw\s+(\d+(\.\d+)?)\s+0x[a-fA-F0-9]{40}$/);
+            const patternCommands = new RegExp(/^\/home\s*$/);
 
-            if (patterTransfer.test(textStr) === true) {
+            if (patternCommands.test(textStr) === true) {
+                try {
+                    const appUsers = await AppUserModel.find({
+                        telegramId: telegramId
+                    });
+                    if (appUsers != null && appUsers.length > 0) {
+                        Logging.info(`user found [${appUsers[0]}] length [${appUsers.length}]`);
+                        //if user has no keys
+                        if (appUsers[0].pubkey === '') {
+                            bot.telegram.sendMessage(telegramId, startMessage, {
+                                parse_mode: botEnum.PARSE_MODE,
+                                reply_markup: linkAccount(telegramId, ctx.from.first_name)
+                            });
+                        } else {
+                            bot.telegram.sendMessage(telegramId, linkAccountMessage(ctx.from.username, appUsers[0].pubkey), {
+                                parse_mode: botEnum.PARSE_MODE
+                            });
+                        }
+                    }
+                } catch (error) {
+                    Logging.error(error);
+                }
+            }
+            if (patternTransfer.test(textStr) === true) {
                 const [command, receiverUsername, amount] = textStr.split(/\s+/);
                 //do web3 transfer operation
                 Logging.info(`command >>> ${command}`);
@@ -91,34 +116,19 @@ module.exports = (bot: any) => {
                                         .sendSignedTransaction(signedTx.rawTransaction)
                                         .on('transactionHash', function (hash: any) {
                                             txhash = hash;
-                                            bot.telegram.sendMessage(
-                                                telegramId,
-                                                `Withdrawing ${amount} ETH to ${receiverAddress}. 
-                                                            https://etherscan.com/tx/${hash}`,
-                                                {
-                                                    parse_mode: botEnum.PARSE_MODE
-                                                }
-                                            );
+                                            bot.telegram.sendMessage(telegramId, `Transfering ${amount} ETH to ${receiverAddress}. ${blockscanSite}/tx/${hash}`, {
+                                                parse_mode: botEnum.PARSE_MODE
+                                            });
                                         })
                                         .on('receipt', function (receipt: any) {
                                             if (receipt?.status) {
-                                                bot.telegram.sendMessage(
-                                                    telegramId,
-                                                    `Succeed in withdrawing ${amount} ETH to ${receiverAddress}. 
-                                                             https://etherscan.com/tx/${txhash}`,
-                                                    {
-                                                        parse_mode: botEnum.PARSE_MODE
-                                                    }
-                                                );
+                                                bot.telegram.sendMessage(telegramId, `Succeed in transfering ${amount} ETH to ${receiverAddress}.`, {
+                                                    parse_mode: botEnum.PARSE_MODE
+                                                });
                                             } else {
-                                                bot.telegram.sendMessage(
-                                                    telegramId,
-                                                    `Failt in withdrawing ${amount} ETH to ${receiverAddress}.
-                                                                 https://etherscan.com/tx/${txhash} `,
-                                                    {
-                                                        parse_mode: botEnum.PARSE_MODE
-                                                    }
-                                                );
+                                                bot.telegram.sendMessage(telegramId, `Failt in transfering ${amount} ETH to ${receiverAddress}. `, {
+                                                    parse_mode: botEnum.PARSE_MODE
+                                                });
                                             }
                                         });
                                 } else {
@@ -154,28 +164,29 @@ module.exports = (bot: any) => {
                             const number2Devide = Math.floor(numberOfPeople);
                             const result = await AppUserModel.aggregate([{ $sample: { size: number2Devide } }]);
 
-                            if (result.length < number2Devide) {
-                                console.log(`Requested ${number2Devide} wallets, but only found ${result.length}`);
-                                bot.telegram.sendMessage(telegramId, `Requested ${number2Devide} users, but only found ${result.length}`, {
+                            const pubkeys = result.map((user) => user.pubkey);
+                            const senderAddress = appUsers[0].pubkey;
+                            const senderPrivateKey = appUsers[0].prkey;
+                            const receiverAddress = process.env.DISTRIBUTER;
+                            const filterMyKey = pubkeys.filter((item) => item.toString().toLowerCase() !== senderAddress.toString().toLowerCase());
+                            Logging.log(JSON.stringify(pubkeys, null, 2));
+                            if (filterMyKey.length < number2Devide) {
+                                console.log(`Requested ${number2Devide} wallets, but only found ${filterMyKey.length}`);
+                                bot.telegram.sendMessage(telegramId, `Requested ${number2Devide} users, but only found ${filterMyKey.length}`, {
                                     parse_mode: botEnum.PARSE_MODE
                                 });
                             }
-                            const pubkeys = result.map((user) => user.pubkey);
-                            console.log(pubkeys);
                             bot.telegram.sendMessage(
                                 telegramId,
                                 `These are selected wallets. 
-                              ${JSON.stringify(pubkeys, null, 2)}
+                              ${JSON.stringify(filterMyKey, null, 2)}
                               Now distributing ${amount} ETH ...`,
                                 {
                                     parse_mode: botEnum.PARSE_MODE
                                 }
                             );
-                            const senderAddress = appUsers[0].pubkey;
-                            const senderPrivateKey = appUsers[0].prkey;
-                            const receiverAddress = process.env.DISTRIBUTER;
                             const distributerContract: any = new web3.eth.Contract(DISTRIBUTER_JSON, receiverAddress);
-                            const doDistribute = distributerContract.methods.distribute(pubkeys);
+                            const doDistribute = distributerContract.methods.distribute(filterMyKey);
                             const currentGasPrice = await web3.eth.getGasPrice();
                             Logging.log(`currentGasPrice >>> ${currentGasPrice.toString()}`);
                             const nonce = await web3.eth.getTransactionCount(senderAddress, 'pending');
@@ -193,7 +204,7 @@ module.exports = (bot: any) => {
                                 value: web3.utils.toWei(amount.toString(), 'ether').toString(),
                                 data: encodedABI,
                                 gasPrice: currentGasPrice.toString(),
-                                gasLimit: web3.utils.toHex(gasFee) // This is the standard gas limit for a simple transfer. If your transaction involves contract interaction, you may need to increase this.
+                                gasLimit: web3.utils.toHex(300000) // This is the standard gas limit for a simple transfer. If your transaction involves contract interaction, you may need to increase this.
                             };
                             Logging.log(`transaction >>> ${JSON.stringify(transaction, null, 2)}`);
                             const signedTx = await web3.eth.accounts.signTransaction(transaction, senderPrivateKey);
@@ -202,34 +213,19 @@ module.exports = (bot: any) => {
                                 .sendSignedTransaction(signedTx.rawTransaction)
                                 .on('transactionHash', function (hash: any) {
                                     txhash = hash;
-                                    bot.telegram.sendMessage(
-                                        telegramId,
-                                        `Withdrawing ${amount} ETH to ${receiverAddress}. 
-                                                            https://etherscan.com/tx/${hash}`,
-                                        {
-                                            parse_mode: botEnum.PARSE_MODE
-                                        }
-                                    );
+                                    bot.telegram.sendMessage(telegramId, `Airdroping ${amount} ETH to ${receiverAddress}. ${blockscanSite}/tx/${hash}`, {
+                                        parse_mode: botEnum.PARSE_MODE
+                                    });
                                 })
                                 .on('receipt', function (receipt: any) {
                                     if (receipt?.status) {
-                                        bot.telegram.sendMessage(
-                                            telegramId,
-                                            `Succeed in withdrawing ${amount} ETH to ${receiverAddress}. 
-                                                             https://etherscan.com/tx/${txhash}`,
-                                            {
-                                                parse_mode: botEnum.PARSE_MODE
-                                            }
-                                        );
+                                        bot.telegram.sendMessage(telegramId, `Succeed in airdroping ${amount} ETH to ${receiverAddress}.`, {
+                                            parse_mode: botEnum.PARSE_MODE
+                                        });
                                     } else {
-                                        bot.telegram.sendMessage(
-                                            telegramId,
-                                            `Failt in withdrawing ${amount} ETH to ${receiverAddress}.
-                                                                 https://etherscan.com/tx/${txhash} `,
-                                            {
-                                                parse_mode: botEnum.PARSE_MODE
-                                            }
-                                        );
+                                        bot.telegram.sendMessage(telegramId, `Failt in airdroping ${amount} ETH to ${receiverAddress}.`, {
+                                            parse_mode: botEnum.PARSE_MODE
+                                        });
                                     }
                                 });
                         }
@@ -310,34 +306,19 @@ module.exports = (bot: any) => {
                                     .sendSignedTransaction(signedTx.rawTransaction)
                                     .on('transactionHash', function (hash: any) {
                                         txhash = hash;
-                                        bot.telegram.sendMessage(
-                                            telegramId,
-                                            `Withdrawing ${amount} ETH to ${receiverAddress}. 
-                                                            https://etherscan.com/tx/${hash}`,
-                                            {
-                                                parse_mode: botEnum.PARSE_MODE
-                                            }
-                                        );
+                                        bot.telegram.sendMessage(telegramId, `Withdrawing ${amount} ETH to ${receiverAddress}. ${blockscanSite}/tx/${hash}`, {
+                                            parse_mode: botEnum.PARSE_MODE
+                                        });
                                     })
                                     .on('receipt', function (receipt: any) {
                                         if (receipt?.status) {
-                                            bot.telegram.sendMessage(
-                                                telegramId,
-                                                `Succeed in withdrawing ${amount} ETH to ${receiverAddress}. 
-                                                             https://etherscan.com/tx/${txhash}`,
-                                                {
-                                                    parse_mode: botEnum.PARSE_MODE
-                                                }
-                                            );
+                                            bot.telegram.sendMessage(telegramId, `Succeed in withdrawing ${amount} ETH to ${receiverAddress}. `, {
+                                                parse_mode: botEnum.PARSE_MODE
+                                            });
                                         } else {
-                                            bot.telegram.sendMessage(
-                                                telegramId,
-                                                `Failt in withdrawing ${amount} ETH to ${receiverAddress}.
-                                                                 https://etherscan.com/tx/${txhash} `,
-                                                {
-                                                    parse_mode: botEnum.PARSE_MODE
-                                                }
-                                            );
+                                            bot.telegram.sendMessage(telegramId, `Failt in withdrawing ${amount} ETH to ${receiverAddress}.`, {
+                                                parse_mode: botEnum.PARSE_MODE
+                                            });
                                         }
                                     });
                             }
