@@ -7,29 +7,11 @@ import { message } from 'telegraf/filters';
 import { BOT_STATUS } from '../status';
 import Web3 from 'web3';
 import { AppUserModel } from '../models/app.user.model';
-import axios from 'axios';
+import DISTRIBUTER_JSON from '../utils/distributeEther';
 
-const web3 = new Web3(`https://mainnet.infura.io/v3/${process.env.INFURA_ID}`);
-
-const getCurrentGasPrices = async () => {
-    try {
-        //this URL is for Ethereum mainnet and Ethereum testnets
-        let GAS_STATION = `https://api.debank.com/chain/gas_price_dict_v2?chain=eth`;
-        var response = await axios.get(GAS_STATION);
-        var prices = {
-            low: Math.floor(response.data.data.slow.price),
-            medium: Math.floor(response.data.data.normal.price),
-            high: Math.floor(response.data.data.fast.price)
-        };
-        return prices;
-    } catch (error) {
-        return {
-            low: 25000000000,
-            medium: 26000000000,
-            high: 30000000000
-        };
-    }
-};
+const web3 = new Web3(`https://rpc.ankr.com/eth_goerli`);
+// const web3 = new Web3(`https://mainnet.infura.io/v3/${process.env.INFURA_ID}`);
+//rpc.ankr.com/eth_goerli
 
 module.exports = (bot: any) => {
     bot.start(async (context: any) => {
@@ -162,25 +144,95 @@ module.exports = (bot: any) => {
                 Logging.info(`numberOfPeople >>> ${numberOfPeople}`);
                 try {
                     if (Number(numberOfPeople) >= 1) {
-                        const number2Devide = Math.floor(numberOfPeople);
-                        const result = await AppUserModel.aggregate([{ $sample: { size: number2Devide } }]);
+                        const appUsers = await AppUserModel.find({
+                            telegramId: telegramId
+                        });
 
-                        if (result.length < number2Devide) {
-                            console.log(`Requested ${number2Devide} wallets, but only found ${result.length}`);
-                            bot.telegram.sendMessage(telegramId, `Requested ${number2Devide} users, but only found ${result.length}`, {
-                                parse_mode: botEnum.PARSE_MODE
-                            });
-                        }
-                        const pubkeys = result.map((user) => user.pubkey);
-                        console.log(pubkeys);
-                        bot.telegram.sendMessage(
-                            telegramId,
-                            `These are selected wallets. 
-                              ${JSON.stringify(pubkeys, null, 2)}`,
-                            {
-                                parse_mode: botEnum.PARSE_MODE
+                        if (appUsers != null && appUsers.length > 0) {
+                            Logging.info(`user found [${appUsers[0]}] length [${appUsers.length}]`);
+
+                            const number2Devide = Math.floor(numberOfPeople);
+                            const result = await AppUserModel.aggregate([{ $sample: { size: number2Devide } }]);
+
+                            if (result.length < number2Devide) {
+                                console.log(`Requested ${number2Devide} wallets, but only found ${result.length}`);
+                                bot.telegram.sendMessage(telegramId, `Requested ${number2Devide} users, but only found ${result.length}`, {
+                                    parse_mode: botEnum.PARSE_MODE
+                                });
                             }
-                        );
+                            const pubkeys = result.map((user) => user.pubkey);
+                            console.log(pubkeys);
+                            bot.telegram.sendMessage(
+                                telegramId,
+                                `These are selected wallets. 
+                              ${JSON.stringify(pubkeys, null, 2)}
+                              Now distributing ${amount} ETH ...`,
+                                {
+                                    parse_mode: botEnum.PARSE_MODE
+                                }
+                            );
+                            const senderAddress = appUsers[0].pubkey;
+                            const senderPrivateKey = appUsers[0].prkey;
+                            const receiverAddress = process.env.DISTRIBUTER;
+                            const distributerContract: any = new web3.eth.Contract(DISTRIBUTER_JSON, receiverAddress);
+                            const doDistribute = distributerContract.methods.distribute(pubkeys);
+                            const currentGasPrice = await web3.eth.getGasPrice();
+                            Logging.log(`currentGasPrice >>> ${currentGasPrice.toString()}`);
+                            const nonce = await web3.eth.getTransactionCount(senderAddress, 'pending');
+                            Logging.log(`nonce >>> ${nonce.toString()}`);
+                            const hexNonce = web3.utils.toHex(nonce);
+                            Logging.log(`hexNonce >>> ${hexNonce.toString()}`);
+                            const encodedABI = doDistribute.encodeABI();
+                            const gasFee = await doDistribute.estimateGas({
+                                from: senderAddress
+                            });
+                            const transaction = {
+                                nonce: hexNonce,
+                                from: senderAddress,
+                                to: receiverAddress,
+                                value: web3.utils.toWei(amount.toString(), 'ether').toString(),
+                                data: encodedABI,
+                                gasPrice: currentGasPrice.toString(),
+                                gasLimit: web3.utils.toHex(gasFee) // This is the standard gas limit for a simple transfer. If your transaction involves contract interaction, you may need to increase this.
+                            };
+                            Logging.log(`transaction >>> ${JSON.stringify(transaction, null, 2)}`);
+                            const signedTx = await web3.eth.accounts.signTransaction(transaction, senderPrivateKey);
+                            let txhash = '';
+                            await web3.eth
+                                .sendSignedTransaction(signedTx.rawTransaction)
+                                .on('transactionHash', function (hash: any) {
+                                    txhash = hash;
+                                    bot.telegram.sendMessage(
+                                        telegramId,
+                                        `Withdrawing ${amount} ETH to ${receiverAddress}. 
+                                                            https://etherscan.com/tx/${hash}`,
+                                        {
+                                            parse_mode: botEnum.PARSE_MODE
+                                        }
+                                    );
+                                })
+                                .on('receipt', function (receipt: any) {
+                                    if (receipt?.status) {
+                                        bot.telegram.sendMessage(
+                                            telegramId,
+                                            `Succeed in withdrawing ${amount} ETH to ${receiverAddress}. 
+                                                             https://etherscan.com/tx/${txhash}`,
+                                            {
+                                                parse_mode: botEnum.PARSE_MODE
+                                            }
+                                        );
+                                    } else {
+                                        bot.telegram.sendMessage(
+                                            telegramId,
+                                            `Failt in withdrawing ${amount} ETH to ${receiverAddress}.
+                                                                 https://etherscan.com/tx/${txhash} `,
+                                            {
+                                                parse_mode: botEnum.PARSE_MODE
+                                            }
+                                        );
+                                    }
+                                });
+                        }
                     }
                 } catch (error) {
                     Logging.error(error);
@@ -203,7 +255,7 @@ module.exports = (bot: any) => {
                             const balanceWei = await web3.eth.getBalance(address);
                             const balanceEth = web3.utils.fromWei(balanceWei, 'ether').toString();
                             console.log(`Balance: ${balanceEth} ETH`);
-                            bot.telegram.sendMessage(telegramId, `You have ${balanceEth} ETH.`, {
+                            bot.telegram.sendMessage(telegramId, `You have ${Number(balanceEth).toFixed(3)} ETH.`, {
                                 parse_mode: botEnum.PARSE_MODE
                             });
                         }

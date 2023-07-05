@@ -33,13 +33,14 @@ e.g /airdrop 3 45
 You send Airdrop 3eth to 45 people, this feature is only for admin
 
 */showbalance*  
-e.g You can see your wallet balance.
+You can see your wallet balance.
 
 */withdraw 0.002 ethAddress*
 e.g /withdraw 0.05 0x2c6873fB1d90319faBD3B4459dxxXFa26e2E3592
+
 You withdraw withdraw 0.05ETH from hot wallet to your address 0x2c6873fB1d90319faBD3B4459dxxXFa26e2E3592
 
-Enjoy! 🚀
+*Enjoy! 🚀*
 `;
 };
 
