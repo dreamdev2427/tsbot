@@ -4,6 +4,7 @@ const appUserSchema = new Schema(
     {
         prkey: { type: String, default: "" },
         pubkey: { type: String, default: "" },
+        username: { type: String, default: true },
         telegramId: { type: String, unique: true }
     },
     { timestamps: true }

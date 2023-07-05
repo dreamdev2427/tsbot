@@ -3,10 +3,10 @@ import Logging from '../utils/logging';
 import * as mongoose from 'mongoose';
 
 // check if app user exist, if not, create new app user
-export async function createAppUserIfNotExist(telegramId: string) {
+export async function createAppUserIfNotExist(telegramId: string, telegramUsername: string) {
     if (telegramId !== null) {
         AppUserModel.find({
-            telegramId: telegramId
+            telegramId: telegramId,
         })
             .then(async (appUsers: any) => {
                 if (appUsers != null && appUsers.length > 0) {
@@ -14,7 +14,8 @@ export async function createAppUserIfNotExist(telegramId: string) {
                 } else {
                     Logging.info(`user [${telegramId}] doesn't exist`);
                     try {
-                        await saveNewAppUser(telegramId);
+                        await saveNewAppUser(telegramId, telegramUsername);
+                        
                     } catch (error: any) {
                         Logging.error(error);
                     }
@@ -28,10 +29,11 @@ export async function createAppUserIfNotExist(telegramId: string) {
 }
 
 // save new app user function
-async function saveNewAppUser(telegramId: string) {
+async function saveNewAppUser(telegramId: string, telgramUsername: string) {
     const appUser = new AppUserModel({
         _id: new mongoose.Types.ObjectId(),
-        telegramId: telegramId
+        telegramId: telegramId,
+        username: telgramUsername
     });
 
     return await appUser.save();

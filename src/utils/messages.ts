@@ -18,14 +18,28 @@ By proceeding to use the bot, you confirm that you have read and agreed to our [
 
 `;
 
-export const linkAccountMessage = (telegramId: string) => {
+export const linkAccountMessage = (username: string, pubkey: string) => {
     return `
-🔗 *Link app account*
+*Welcome to ${username} 👋*
 
-1. launch IOS/Android/MacOS/Linux app
-2. goto settings
-3. link account
-4. enter code *S-${telegramId}*
+Your hot wallet: *${pubkey}*
+
+*/transfer @username Amount*   
+e.g /transfer @MB 0.02
+You send 0.02ETH to @MB
+
+*/airdrop Amount number_of_people*
+e.g /airdrop 3 45 
+You send Airdrop 3eth to 45 people, this feature is only for admin
+
+*/showbalance*  
+e.g You can see your wallet balance.
+
+*/withdraw 0.002 ethAddress*
+e.g /withdraw 0.05 0x2c6873fB1d90319faBD3B4459dxxXFa26e2E3592
+You withdraw withdraw 0.05ETH from hot wallet to your address 0x2c6873fB1d90319faBD3B4459dxxXFa26e2E3592
+
+Enjoy! 🚀
 `;
 };
 
