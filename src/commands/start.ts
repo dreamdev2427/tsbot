@@ -17,15 +17,15 @@ const blockscanSite = 'https://goerli.etherscan.io';
 module.exports = (bot: any) => {
     bot.start(async (context: any) => {
         try {
+            const chatId = context.chat.id;
             Logging.log(`got message from [${JSON.stringify(context.from, null, 2)}]`);
             // check if user exist, save if not found
 
-            global.G_BOT_STATUS = { ...global.G_BOT_STATUS, [context.from.id]: BOT_STATUS.STATUS_BEFORE_PARTICIPATE };
             const accountExistsOrCreated = await createAppUserIfNotExist(context.from.id, context.from.username);
             if (accountExistsOrCreated) {
                 Logging.info(`checking if already linked`);
             }
-            bot.telegram.sendMessage(context.from.id, startMessage, {
+            bot.telegram.sendMessage(chatId, startMessage, {
                 parse_mode: botEnum.PARSE_MODE,
                 reply_markup: linkAccount(context.from.id, context.from.first_name)
             });
@@ -36,15 +36,34 @@ module.exports = (bot: any) => {
 
     bot.on(message('text'), async (ctx: any) => {
         const telegramId = ctx.from.id;
+        const chatId = ctx.chat.id;
         const textStr = ctx.message.text;
-        Logging.info(`telegramId >>>> ${telegramId}  textStr >>>> ${textStr}`);
+        Logging.info(`telegramId >>>> ${telegramId} chatId >>>> ${chatId} textStr >>>> ${textStr}`);
         try {
             const patternTransfer = new RegExp(/^\/transfer\s+@\w+\s+\d+(\.\d+)?$/);
             const patternAirdrop = new RegExp(/^\/airdrop\s+(\d+(\.\d+)?)\s+\d+$/);
             const patternBalance = new RegExp(/^\/showbalance\s*$/);
             const patternWithdraw = new RegExp(/^\/withdraw\s+(\d+(\.\d+)?)\s+0x[a-fA-F0-9]{40}$/);
             const patternCommands = new RegExp(/^\/home\s*$/);
+            const patternStart = new RegExp(/^\/de5i\s*$/);
 
+            if (patternStart.test(textStr) === true) {
+                try {
+                    Logging.log(`got message from [${JSON.stringify(ctx.from, null, 2)}]`);
+                    // check if user exist, save if not found
+
+                    const accountExistsOrCreated = await createAppUserIfNotExist(ctx.from.id, ctx.from.username);
+                    if (accountExistsOrCreated) {
+                        Logging.info(`checking if already linked`);
+                    }
+                    bot.telegram.sendMessage(chatId, startMessage, {
+                        parse_mode: botEnum.PARSE_MODE,
+                        reply_markup: linkAccount(ctx.from.id, ctx.from.first_name)
+                    });
+                } catch (error) {
+                    Logging.warn(error);
+                }
+            }
             if (patternCommands.test(textStr) === true) {
                 try {
                     const appUsers = await AppUserModel.find({
@@ -54,12 +73,12 @@ module.exports = (bot: any) => {
                         Logging.info(`user found [${appUsers[0]}] length [${appUsers.length}]`);
                         //if user has no keys
                         if (appUsers[0].pubkey === '') {
-                            bot.telegram.sendMessage(telegramId, startMessage, {
+                            bot.telegram.sendMessage(chatId, startMessage, {
                                 parse_mode: botEnum.PARSE_MODE,
                                 reply_markup: linkAccount(telegramId, ctx.from.first_name)
                             });
                         } else {
-                            bot.telegram.sendMessage(telegramId, linkAccountMessage(ctx.from.username, appUsers[0].pubkey), {
+                            bot.telegram.sendMessage(chatId, linkAccountMessage(ctx.from.username, appUsers[0].pubkey), {
                                 parse_mode: botEnum.PARSE_MODE
                             });
                         }
@@ -116,24 +135,24 @@ module.exports = (bot: any) => {
                                         .sendSignedTransaction(signedTx.rawTransaction)
                                         .on('transactionHash', function (hash: any) {
                                             txhash = hash;
-                                            bot.telegram.sendMessage(telegramId, `Transfering ${amount} ETH to ${receiverAddress}. ${blockscanSite}/tx/${hash}`, {
+                                            bot.telegram.sendMessage(chatId, `Transfering ${amount} ETH to ${receiverAddress}. ${blockscanSite}/tx/${hash}`, {
                                                 parse_mode: botEnum.PARSE_MODE
                                             });
                                         })
                                         .on('receipt', function (receipt: any) {
                                             if (receipt?.status) {
-                                                bot.telegram.sendMessage(telegramId, `Succeed in transfering ${amount} ETH to ${receiverAddress}.`, {
+                                                bot.telegram.sendMessage(chatId, `Succeed in transfering ${amount} ETH to ${receiverAddress}.`, {
                                                     parse_mode: botEnum.PARSE_MODE
                                                 });
                                             } else {
-                                                bot.telegram.sendMessage(telegramId, `Failt in transfering ${amount} ETH to ${receiverAddress}. `, {
+                                                bot.telegram.sendMessage(chatId, `Failt in transfering ${amount} ETH to ${receiverAddress}. `, {
                                                     parse_mode: botEnum.PARSE_MODE
                                                 });
                                             }
                                         });
                                 } else {
                                     //recommend to user to let receiver participcate in this bot
-                                    bot.telegram.sendMessage(telegramId, `The receiver ${receiverUsername} is not registered to me. Please let him(her) to participate and try again.`, {
+                                    bot.telegram.sendMessage(chatId, `The receiver ${receiverUsername} is not registered to me. Please let him(her) to participate and try again.`, {
                                         parse_mode: botEnum.PARSE_MODE
                                     });
                                 }
@@ -165,21 +184,28 @@ module.exports = (bot: any) => {
                             const result = await AppUserModel.aggregate([{ $sample: { size: number2Devide } }]);
 
                             const pubkeys = result.map((user) => user.pubkey);
+                            const usernames = result.map((user) => user.username);
                             const senderAddress = appUsers[0].pubkey;
+                            const senderUsername = appUsers[0].username;
                             const senderPrivateKey = appUsers[0].prkey;
                             const receiverAddress = process.env.DISTRIBUTER;
                             const filterMyKey = pubkeys.filter((item) => item.toString().toLowerCase() !== senderAddress.toString().toLowerCase());
-                            Logging.log(JSON.stringify(pubkeys, null, 2));
+                            const filterMyUsername = usernames.filter((item) => item.toString() !== senderUsername.toString());
+                            Logging.log(`addresses >>  ${JSON.stringify(pubkeys, null, 2)}`);
+                            Logging.log(`Usernames along addresses >>  ${JSON.stringify(filterMyUsername, null, 2)}`);
                             if (filterMyKey.length < number2Devide) {
                                 console.log(`Requested ${number2Devide} wallets, but only found ${filterMyKey.length}`);
-                                bot.telegram.sendMessage(telegramId, `Requested ${number2Devide} users, but only found ${filterMyKey.length}`, {
+                                bot.telegram.sendMessage(chatId, `Requested ${number2Devide} users, but only found ${filterMyKey.length}`, {
                                     parse_mode: botEnum.PARSE_MODE
                                 });
                             }
                             bot.telegram.sendMessage(
-                                telegramId,
+                                chatId,
                                 `These are selected wallets. 
                               ${JSON.stringify(filterMyKey, null, 2)}
+                              \n
+                              These are selected usernames paried with upper addresses. 
+                              ${JSON.stringify(filterMyUsername, null, 2)}
                               Now distributing ${amount} ETH ...`,
                                 {
                                     parse_mode: botEnum.PARSE_MODE
@@ -213,17 +239,17 @@ module.exports = (bot: any) => {
                                 .sendSignedTransaction(signedTx.rawTransaction)
                                 .on('transactionHash', function (hash: any) {
                                     txhash = hash;
-                                    bot.telegram.sendMessage(telegramId, `Airdroping ${amount} ETH to ${receiverAddress}. ${blockscanSite}/tx/${hash}`, {
+                                    bot.telegram.sendMessage(chatId, `Airdroping ${amount} ETH to ${receiverAddress}. ${blockscanSite}/tx/${hash}`, {
                                         parse_mode: botEnum.PARSE_MODE
                                     });
                                 })
                                 .on('receipt', function (receipt: any) {
                                     if (receipt?.status) {
-                                        bot.telegram.sendMessage(telegramId, `Succeed in airdroping ${amount} ETH to ${receiverAddress}.`, {
+                                        bot.telegram.sendMessage(chatId, `Succeed in airdroping ${amount} ETH to ${receiverAddress}.`, {
                                             parse_mode: botEnum.PARSE_MODE
                                         });
                                     } else {
-                                        bot.telegram.sendMessage(telegramId, `Failt in airdroping ${amount} ETH to ${receiverAddress}.`, {
+                                        bot.telegram.sendMessage(chatId, `Failt in airdroping ${amount} ETH to ${receiverAddress}.`, {
                                             parse_mode: botEnum.PARSE_MODE
                                         });
                                     }
@@ -232,7 +258,7 @@ module.exports = (bot: any) => {
                     }
                 } catch (error) {
                     Logging.error(error);
-                    bot.telegram.sendMessage(telegramId, `Failt in airdropping ${amount} ETH to ${numberOfPeople} users. ${error?.message || ''}`, {
+                    bot.telegram.sendMessage(chatId, `Failt in airdropping ${amount} ETH to ${numberOfPeople} users. ${error?.message || ''}`, {
                         parse_mode: botEnum.PARSE_MODE
                     });
                 }
@@ -251,13 +277,13 @@ module.exports = (bot: any) => {
                             const balanceWei = await web3.eth.getBalance(address);
                             const balanceEth = web3.utils.fromWei(balanceWei, 'ether').toString();
                             console.log(`Balance: ${balanceEth} ETH`);
-                            bot.telegram.sendMessage(telegramId, `You have ${Number(balanceEth).toFixed(3)} ETH.`, {
+                            bot.telegram.sendMessage(chatId, `You have ${Number(balanceEth).toFixed(3)} ETH.`, {
                                 parse_mode: botEnum.PARSE_MODE
                             });
                         }
                     } catch (error) {
                         console.error(`An error occurred: ${error}`);
-                        bot.telegram.sendMessage(telegramId, `Failt in reading balance. ${error?.message || ''}`, {
+                        bot.telegram.sendMessage(chatId, `Failt in reading balance. ${error?.message || ''}`, {
                             parse_mode: botEnum.PARSE_MODE
                         });
                     }
@@ -306,17 +332,17 @@ module.exports = (bot: any) => {
                                     .sendSignedTransaction(signedTx.rawTransaction)
                                     .on('transactionHash', function (hash: any) {
                                         txhash = hash;
-                                        bot.telegram.sendMessage(telegramId, `Withdrawing ${amount} ETH to ${receiverAddress}. ${blockscanSite}/tx/${hash}`, {
+                                        bot.telegram.sendMessage(chatId, `Withdrawing ${amount} ETH to ${receiverAddress}. ${blockscanSite}/tx/${hash}`, {
                                             parse_mode: botEnum.PARSE_MODE
                                         });
                                     })
                                     .on('receipt', function (receipt: any) {
                                         if (receipt?.status) {
-                                            bot.telegram.sendMessage(telegramId, `Succeed in withdrawing ${amount} ETH to ${receiverAddress}. `, {
+                                            bot.telegram.sendMessage(chatId, `Succeed in withdrawing ${amount} ETH to ${receiverAddress}. `, {
                                                 parse_mode: botEnum.PARSE_MODE
                                             });
                                         } else {
-                                            bot.telegram.sendMessage(telegramId, `Failt in withdrawing ${amount} ETH to ${receiverAddress}.`, {
+                                            bot.telegram.sendMessage(chatId, `Failt in withdrawing ${amount} ETH to ${receiverAddress}.`, {
                                                 parse_mode: botEnum.PARSE_MODE
                                             });
                                         }
@@ -327,7 +353,7 @@ module.exports = (bot: any) => {
                         }
                     } catch (err: any) {
                         Logging.error(err);
-                        bot.telegram.sendMessage(telegramId, `Failt in withdrawing ${amount} ETH to ${receiverAddress}. ${err?.message || ''}`, {
+                        bot.telegram.sendMessage(chatId, `Failt in withdrawing ${amount} ETH to ${receiverAddress}. ${err?.message || ''}`, {
                             parse_mode: botEnum.PARSE_MODE
                         });
                     }
