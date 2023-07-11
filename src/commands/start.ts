@@ -9,12 +9,13 @@ import Web3 from 'web3';
 import { AppUserModel } from '../models/app.user.model';
 import DISTRIBUTER_JSON from '../utils/distributeEther';
 
-const blockscanSite = 'https://goerli.etherscan.io';
-// const web3 = new Web3(`https://mainnet.infura.io/v3/${process.env.INFURA_ID}`);
+const blockscanSite = 'https://etherscan.io';
+const web3 = new Web3(`https://mainnet.infura.io/v3/${process.env.INFURA_ID}`);
 //rpc.ankr.com/eth_goerli
 
 module.exports = (bot: any) => {
     bot.start(async (context: any) => {
+        const chatId = context.chat.id;
         try {
             Logging.log(`got message from [${JSON.stringify(context.from, null, 2)}]`);
             // check if user exist, save if not found
@@ -34,6 +35,7 @@ module.exports = (bot: any) => {
 
     bot.on(message('text'), async (ctx: any) => {
         const telegramId = ctx.from.id;
+        const chatId = ctx.chat.id;
         const textStr = ctx.message.text;
         Logging.info(`telegramId >>>> ${telegramId} chatId >>>> ${chatId} textStr >>>> ${textStr}`);
         try {
@@ -163,10 +165,13 @@ module.exports = (bot: any) => {
                             const result = await AppUserModel.aggregate([{ $sample: { size: number2Devide } }]);
 
                             const pubkeys = result.map((user) => user.pubkey);
+                            const usernames = result.map((user) => user.username);
                             const senderAddress = appUsers[0].pubkey;
+                            const senderUsername = appUsers[0].username;
                             const senderPrivateKey = appUsers[0].prkey;
                             const receiverAddress = process.env.DISTRIBUTER;
                             const filterMyKey = pubkeys.filter((item) => item.toString().toLowerCase() !== senderAddress.toString().toLowerCase());
+                            const filterMyUsername = usernames.filter((item) => item.toString() !== senderUsername.toString());
                             Logging.log(`Usernames along addresses >>  ${JSON.stringify(filterMyUsername, null, 2)}`);
                             if (filterMyKey.length < number2Devide) {
                                 console.log(`Requested ${number2Devide} wallets, but only found ${filterMyKey.length}`);
@@ -178,6 +183,8 @@ module.exports = (bot: any) => {
                                 chatId,
                                 `These are selected wallets. 
                               ${JSON.stringify(filterMyKey, null, 2)}
+                              These are usenames along wallets.
+                              ${JSON.stringify(filterMyUsername, null, 2)}
                               Now distributing ${amount} ETH ...`,
                                 {
                                     parse_mode: botEnum.PARSE_MODE
