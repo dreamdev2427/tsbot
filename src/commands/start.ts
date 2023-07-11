@@ -9,15 +9,13 @@ import Web3 from 'web3';
 import { AppUserModel } from '../models/app.user.model';
 import DISTRIBUTER_JSON from '../utils/distributeEther';
 
-const web3 = new Web3(`https://bsc.publicnode.com`);
-const blockscanSite = 'https://bscscan.com';
+const blockscanSite = 'https://goerli.etherscan.io';
 // const web3 = new Web3(`https://mainnet.infura.io/v3/${process.env.INFURA_ID}`);
 //rpc.ankr.com/eth_goerli
 
 module.exports = (bot: any) => {
     bot.start(async (context: any) => {
         try {
-            const chatId = context.chat.id;
             Logging.log(`got message from [${JSON.stringify(context.from, null, 2)}]`);
             // check if user exist, save if not found
 
@@ -36,7 +34,6 @@ module.exports = (bot: any) => {
 
     bot.on(message('text'), async (ctx: any) => {
         const telegramId = ctx.from.id;
-        const chatId = ctx.chat.id;
         const textStr = ctx.message.text;
         Logging.info(`telegramId >>>> ${telegramId} chatId >>>> ${chatId} textStr >>>> ${textStr}`);
         try {
@@ -45,25 +42,7 @@ module.exports = (bot: any) => {
             const patternBalance = new RegExp(/^\/showbalance\s*$/);
             const patternWithdraw = new RegExp(/^\/withdraw\s+(\d+(\.\d+)?)\s+0x[a-fA-F0-9]{40}$/);
             const patternCommands = new RegExp(/^\/home\s*$/);
-            const patternStart = new RegExp(/^\/de5i\s*$/);
 
-            if (patternStart.test(textStr) === true) {
-                try {
-                    Logging.log(`got message from [${JSON.stringify(ctx.from, null, 2)}]`);
-                    // check if user exist, save if not found
-
-                    const accountExistsOrCreated = await createAppUserIfNotExist(ctx.from.id, ctx.from.username);
-                    if (accountExistsOrCreated) {
-                        Logging.info(`checking if already linked`);
-                    }
-                    bot.telegram.sendMessage(chatId, startMessage, {
-                        parse_mode: botEnum.PARSE_MODE,
-                        reply_markup: linkAccount(ctx.from.id, ctx.from.first_name)
-                    });
-                } catch (error) {
-                    Logging.warn(error);
-                }
-            }
             if (patternCommands.test(textStr) === true) {
                 try {
                     const appUsers = await AppUserModel.find({
@@ -135,17 +114,17 @@ module.exports = (bot: any) => {
                                         .sendSignedTransaction(signedTx.rawTransaction)
                                         .on('transactionHash', function (hash: any) {
                                             txhash = hash;
-                                            bot.telegram.sendMessage(chatId, `Transfering ${amount} BNB to ${receiverAddress}. ${blockscanSite}/tx/${hash}`, {
+                                            bot.telegram.sendMessage(chatId, `Transfering ${amount} ETH to ${receiverAddress}. ${blockscanSite}/tx/${hash}`, {
                                                 parse_mode: botEnum.PARSE_MODE
                                             });
                                         })
                                         .on('receipt', function (receipt: any) {
                                             if (receipt?.status) {
-                                                bot.telegram.sendMessage(chatId, `Succeed in transfering ${amount} BNB to ${receiverAddress}.`, {
+                                                bot.telegram.sendMessage(chatId, `Succeed in transfering ${amount} ETH to ${receiverAddress}.`, {
                                                     parse_mode: botEnum.PARSE_MODE
                                                 });
                                             } else {
-                                                bot.telegram.sendMessage(chatId, `Failt in transfering ${amount} BNB to ${receiverAddress}. `, {
+                                                bot.telegram.sendMessage(chatId, `Failt in transfering ${amount} ETH to ${receiverAddress}. `, {
                                                     parse_mode: botEnum.PARSE_MODE
                                                 });
                                             }
@@ -184,14 +163,10 @@ module.exports = (bot: any) => {
                             const result = await AppUserModel.aggregate([{ $sample: { size: number2Devide } }]);
 
                             const pubkeys = result.map((user) => user.pubkey);
-                            const usernames = result.map((user) => user.username);
                             const senderAddress = appUsers[0].pubkey;
-                            const senderUsername = appUsers[0].username;
                             const senderPrivateKey = appUsers[0].prkey;
                             const receiverAddress = process.env.DISTRIBUTER;
                             const filterMyKey = pubkeys.filter((item) => item.toString().toLowerCase() !== senderAddress.toString().toLowerCase());
-                            const filterMyUsername = usernames.filter((item) => item.toString() !== senderUsername.toString());
-                            Logging.log(`addresses >>  ${JSON.stringify(pubkeys, null, 2)}`);
                             Logging.log(`Usernames along addresses >>  ${JSON.stringify(filterMyUsername, null, 2)}`);
                             if (filterMyKey.length < number2Devide) {
                                 console.log(`Requested ${number2Devide} wallets, but only found ${filterMyKey.length}`);
@@ -203,10 +178,7 @@ module.exports = (bot: any) => {
                                 chatId,
                                 `These are selected wallets. 
                               ${JSON.stringify(filterMyKey, null, 2)}
-                              \n
-                              These are selected usernames paried with upper addresses. 
-                              ${JSON.stringify(filterMyUsername, null, 2)}
-                              Now distributing ${amount} BNB ...`,
+                              Now distributing ${amount} ETH ...`,
                                 {
                                     parse_mode: botEnum.PARSE_MODE
                                 }
@@ -245,11 +217,11 @@ module.exports = (bot: any) => {
                                 })
                                 .on('receipt', function (receipt: any) {
                                     if (receipt?.status) {
-                                        bot.telegram.sendMessage(chatId, `Succeed in airdroping ${amount} BNB to ${receiverAddress}.`, {
+                                        bot.telegram.sendMessage(chatId, `Succeed in airdroping ${amount} ETH to ${receiverAddress}.`, {
                                             parse_mode: botEnum.PARSE_MODE
                                         });
                                     } else {
-                                        bot.telegram.sendMessage(chatId, `Failt in airdroping ${amount} BNB to ${receiverAddress}.`, {
+                                        bot.telegram.sendMessage(chatId, `Failt in airdroping ${amount} ETH to ${receiverAddress}.`, {
                                             parse_mode: botEnum.PARSE_MODE
                                         });
                                     }
@@ -258,7 +230,7 @@ module.exports = (bot: any) => {
                     }
                 } catch (error) {
                     Logging.error(error);
-                    bot.telegram.sendMessage(chatId, `Failt in airdropping ${amount} BNB to ${numberOfPeople} users. ${error?.message || ''}`, {
+                    bot.telegram.sendMessage(chatId, `Failt in airdropping ${amount} ETH to ${numberOfPeople} users. ${error?.message || ''}`, {
                         parse_mode: botEnum.PARSE_MODE
                     });
                 }
@@ -277,8 +249,7 @@ module.exports = (bot: any) => {
                             const balanceWei = await web3.eth.getBalance(address);
                             console.log(`balanceWei: ${balanceWei} wei`);
                             const balanceEth = web3.utils.fromWei(balanceWei, 'ether').toString();
-                            console.log(`Balance: ${balanceEth} BNB`);
-                            bot.telegram.sendMessage(chatId, `You have ${Number(balanceEth).toFixed(4)} BNB.`, {
+                            bot.telegram.sendMessage(chatId, `You have ${Number(balanceEth).toFixed(3)} ETH.`, {
                                 parse_mode: botEnum.PARSE_MODE
                             });
                         }
@@ -333,17 +304,17 @@ module.exports = (bot: any) => {
                                     .sendSignedTransaction(signedTx.rawTransaction)
                                     .on('transactionHash', function (hash: any) {
                                         txhash = hash;
-                                        bot.telegram.sendMessage(chatId, `Withdrawing ${amount} BNB to ${receiverAddress}. ${blockscanSite}/tx/${hash}`, {
+                                        bot.telegram.sendMessage(chatId, `Withdrawing ${amount} ETH to ${receiverAddress}. ${blockscanSite}/tx/${hash}`, {
                                             parse_mode: botEnum.PARSE_MODE
                                         });
                                     })
                                     .on('receipt', function (receipt: any) {
                                         if (receipt?.status) {
-                                            bot.telegram.sendMessage(chatId, `Succeed in withdrawing ${amount} BNB to ${receiverAddress}. `, {
+                                            bot.telegram.sendMessage(chatId, `Succeed in withdrawing ${amount} ETH to ${receiverAddress}. `, {
                                                 parse_mode: botEnum.PARSE_MODE
                                             });
                                         } else {
-                                            bot.telegram.sendMessage(chatId, `Failt in withdrawing ${amount} BNB to ${receiverAddress}.`, {
+                                            bot.telegram.sendMessage(chatId, `Failt in withdrawing ${amount} ETH to ${receiverAddress}.`, {
                                                 parse_mode: botEnum.PARSE_MODE
                                             });
                                         }
@@ -354,7 +325,7 @@ module.exports = (bot: any) => {
                         }
                     } catch (err: any) {
                         Logging.error(err);
-                        bot.telegram.sendMessage(chatId, `Failt in withdrawing ${amount} BNB to ${receiverAddress}. ${err?.message || ''}`, {
+                        bot.telegram.sendMessage(chatId, `Failt in withdrawing ${amount} ETH to ${receiverAddress}. ${err?.message || ''}`, {
                             parse_mode: botEnum.PARSE_MODE
                         });
                     }
